@@ -1,0 +1,45 @@
+# Environment variables
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Data files
+data/raw/*
+data/processed/*
+*.csv
+*.json
+*.xlsx
+
+# Database
+*.db
+*.sqlite
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# API Keys
+kaggle.json
+credentials.json
