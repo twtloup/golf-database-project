@@ -1,106 +1,113 @@
-"""
-SQLAlchemy models for Golf Database
-"""
-from sqlalchemy import create_engine, Column, Integer, String, Date, Decimal, Boolean, ForeignKey, DateTime, Text
+from datetime import date, datetime
+from sqlalchemy import create_engine, Column, Integer, String, Date, Boolean, ForeignKey, DateTime, Text, Float
+from sqlalchemy.types import Numeric  # Use Numeric instead of Decimal for SQLAlchemy 2.x
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
-from datetime import datetime
-import os
 
 Base = declarative_base()
 
 class Player(Base):
     __tablename__ = 'players'
-ECHO is off.
-    player_id = Column(Integer, primary_key=True)
+    
+    player_id = Column(Integer, primary_key=True, autoincrement=True)
     first_name = Column(String(50), nullable=False)
     last_name = Column(String(50), nullable=False)
-    nationality = Column(String(3))
+    nationality = Column(String(50))
     birth_date = Column(Date)
     turned_professional_date = Column(Date)
     height_cm = Column(Integer)
     world_ranking = Column(Integer)
-    career_earnings = Column(Decimal(12,2))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-ECHO is off.
+    career_earnings = Column(Numeric(12, 2))  # Using Numeric instead of Decimal
+    
     # Relationships
     tournament_entries = relationship("TournamentEntry", back_populates="player")
-ECHO is off.
+    rounds = relationship("Round", back_populates="player")
+    
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
-ECHO is off.
+    
     def __repr__(self):
-        return f"^<Player^({self.full_name}^)^>"
+        return f"<Player(player_id={self.player_id}, name='{self.full_name}', nationality='{self.nationality}')>"
 
 class Course(Base):
     __tablename__ = 'courses'
-ECHO is off.
-    course_id = Column(Integer, primary_key=True)
+    
+    course_id = Column(Integer, primary_key=True, autoincrement=True)
     course_name = Column(String(100), nullable=False)
     location = Column(String(100))
-    country = Column(String(3))
+    country = Column(String(50))
     par = Column(Integer)
     yardage = Column(Integer)
-    course_rating = Column(Decimal(4,1))
+    course_rating = Column(Float)
     slope_rating = Column(Integer)
     architect = Column(String(100))
     established_year = Column(Integer)
     greens_type = Column(String(50))
-    created_at = Column(DateTime, default=datetime.utcnow)
-ECHO is off.
+    
+    # Relationships
+    tournaments = relationship("Tournament", back_populates="course")
+    
     def __repr__(self):
-        return f"^<Course^({self.course_name}^)^>"
+        return f"<Course(course_id={self.course_id}, name='{self.course_name}', location='{self.location}')>"
 
 class Tournament(Base):
     __tablename__ = 'tournaments'
-ECHO is off.
-    tournament_id = Column(Integer, primary_key=True)
+    
+    tournament_id = Column(Integer, primary_key=True, autoincrement=True)
     tournament_name = Column(String(100), nullable=False)
-    course_id = Column(Integer, ForeignKey('courses.course_id'))
+    course_id = Column(Integer, ForeignKey('courses.course_id'), nullable=False)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
-    prize_money_usd = Column(Integer)
+    prize_money_usd = Column(Numeric(12, 2))  # Using Numeric instead of Decimal
     field_size = Column(Integer)
     cut_line = Column(Integer)
     winning_score = Column(Integer)
-    weather_conditions = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-ECHO is off.
+    
     # Relationships
-    course = relationship("Course")
-    entries = relationship("TournamentEntry", back_populates="tournament")
-ECHO is off.
+    course = relationship("Course", back_populates="tournaments")
+    tournament_entries = relationship("TournamentEntry", back_populates="tournament")
+    rounds = relationship("Round", back_populates="tournament")
+    
     def __repr__(self):
-        return f"^<Tournament^({self.tournament_name}^)^>"
+        return f"<Tournament(tournament_id={self.tournament_id}, name='{self.tournament_name}', start_date='{self.start_date}')>"
 
 class TournamentEntry(Base):
     __tablename__ = 'tournament_entries'
-ECHO is off.
-    entry_id = Column(Integer, primary_key=True)
-    tournament_id = Column(Integer, ForeignKey('tournaments.tournament_id'))
-    player_id = Column(Integer, ForeignKey('players.player_id'))
+    
+    entry_id = Column(Integer, primary_key=True, autoincrement=True)
+    tournament_id = Column(Integer, ForeignKey('tournaments.tournament_id'), nullable=False)
+    player_id = Column(Integer, ForeignKey('players.player_id'), nullable=False)
+    entry_date = Column(Date)
+    entry_status = Column(String(20))  # 'confirmed', 'withdrawn', 'missed_cut'
     final_position = Column(Integer)
     total_score = Column(Integer)
-    prize_money = Column(Decimal(10,2))
-    made_cut = Column(Boolean, default=False)
-    rounds_played = Column(Integer)
-ECHO is off.
+    prize_money_won = Column(Numeric(10, 2))  # Using Numeric instead of Decimal
+    made_cut = Column(Boolean)
+    
     # Relationships
-    tournament = relationship("Tournament", back_populates="entries")
+    tournament = relationship("Tournament", back_populates="tournament_entries")
     player = relationship("Player", back_populates="tournament_entries")
-    rounds = relationship("Round")
+    
+    def __repr__(self):
+        return f"<TournamentEntry(entry_id={self.entry_id}, tournament_id={self.tournament_id}, player_id={self.player_id})>"
 
 class Round(Base):
     __tablename__ = 'rounds'
-ECHO is off.
-    round_id = Column(Integer, primary_key=True)
-    entry_id = Column(Integer, ForeignKey('tournament_entries.entry_id'))
-    round_number = Column(Integer, nullable=False)
-    score = Column(Integer)
-    strokes_gained_total = Column(Decimal(5,2))
-    fairways_hit = Column(Integer)
-    greens_in_regulation = Column(Integer)
-    putts = Column(Integer)
-    date_played = Column(Date)
+    
+    round_id = Column(Integer, primary_key=True, autoincrement=True)
+    tournament_id = Column(Integer, ForeignKey('tournaments.tournament_id'), nullable=False)
+    player_id = Column(Integer, ForeignKey('players.player_id'), nullable=False)
+    round_number = Column(Integer, nullable=False)  # 1, 2, 3, 4
+    score = Column(Integer)  # Total strokes for the round
+    par_score = Column(Integer)  # Score relative to par (e.g., -2, +1)
+    round_date = Column(Date)
+    tee_time = Column(DateTime)
+    completed = Column(Boolean, default=False)
+    
+    # Relationships
+    tournament = relationship("Tournament", back_populates="rounds")
+    player = relationship("Player", back_populates="rounds")
+    
+    def __repr__(self):
+        return f"<Round(round_id={self.round_id}, tournament_id={self.tournament_id}, player_id={self.player_id}, round={self.round_number})>"

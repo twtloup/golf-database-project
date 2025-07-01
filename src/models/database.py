@@ -1,33 +1,45 @@
-"""
-Database connection and utility functions
-"""
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from src.models.models import Base
 import os
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
 class DatabaseManager:
     def __init__(self):
-        self.database_url = os.getenv('DATABASE_URL')
-        if not self.database_url:
-            # Fallback to SQLite for development
-            self.database_url = 'sqlite:///golf_database.db'
-            print("⚠️  Using SQLite fallback. Set DATABASE_URL for PostgreSQL.")
-ECHO is off.
-        self.engine = create_engine(self.database_url)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-ECHO is off.
+        # Get database URL from environment, fallback to SQLite
+        self.database_url = os.getenv('DATABASE_URL', 'sqlite:///golf_database.db')
+        
+        # Create engine
+        if 'sqlite' in self.database_url:
+            # SQLite specific settings
+            self.engine = create_engine(
+                self.database_url, 
+                echo=False,  # Set to True for SQL debugging
+                connect_args={"check_same_thread": False}
+            )
+        else:
+            # PostgreSQL or other database
+            self.engine = create_engine(self.database_url, echo=False)
+        
+        # Create session factory
+        self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
+    
     def create_tables(self):
         """Create all database tables"""
+        from .models import Base
         Base.metadata.create_all(bind=self.engine)
-        print("✅ Database tables created")
-ECHO is off.
+    
     def get_session(self):
-        """Get database session"""
+        """Get a database session"""
         return self.SessionLocal()
+    
+    def drop_tables(self):
+        """Drop all database tables (use with caution!)"""
+        from .models import Base
+        Base.metadata.drop_all(bind=self.engine)
 
 # Global database manager instance
 db_manager = DatabaseManager()
