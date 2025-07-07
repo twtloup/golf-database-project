@@ -240,7 +240,7 @@ def create_app():
                 tournament_dict = {
                     "tournament_id": row[0],
                     "tournament_name": row[1],
-                    "tournament_date": row[2].isoformat() if row[2] else None,
+                    "tournament_date": row[2] if row[2] else None,  # Already a string from SQLite
                     "purse_millions": float(row[3]) if row[3] else None,
                     "season": row[4],
                     "has_cut": bool(row[5]) if row[5] is not None else None,
@@ -330,7 +330,7 @@ def create_app():
                     "result_id": row[0],
                     "player_name": row[1],
                     "tournament_name": row[2],
-                    "tournament_date": row[3].isoformat() if row[3] else None,
+                    "tournament_date": row[3] if row[3] else None,  # Already a string
                     "course_name": row[4],
                     "final_position": row[5],
                     "total_strokes": row[6],
@@ -422,7 +422,7 @@ def create_app():
                 results["tournaments"].append({
                     "tournament_id": row[0],
                     "tournament_name": row[1],
-                    "tournament_date": row[2].isoformat() if row[2] else None,
+                    "tournament_date": row[2] if row[2] else None,  # Already a string, no .isoformat() needed
                     "season": row[3]
                 })
             
