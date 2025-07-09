@@ -1,7 +1,7 @@
 """
-Golf Database API - Updated to serve enhanced tournament and course data
+Golf Database API - Updated to serve enhanced tournament and course data with Natural Language Interface
 """
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template_string
 from flask_cors import CORS
 import os
 import sys
@@ -36,6 +36,696 @@ except ImportError as e:
     print("Make sure your database modules are properly set up")
     print("Continuing without database connection...")
 
+# HTML Template for the Natural Language Interface
+HTML_TEMPLATE = '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Golf Database - Natural Language Query</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .query-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .query-input-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .query-input {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1.1em;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .query-input:focus {
+            border-color: #2a5298;
+        }
+
+        .query-button {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .query-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .query-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .examples {
+            margin-top: 20px;
+        }
+
+        .examples h3 {
+            color: #2a5298;
+            margin-bottom: 15px;
+        }
+
+        .example-queries {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .example-query {
+            background: #f5f5f5;
+            padding: 8px 15px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 0.9em;
+        }
+
+        .example-query:hover {
+            background: #e0e0e0;
+        }
+
+        .results-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            min-height: 200px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .query-interpretation {
+            background: #f0f8ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2a5298;
+        }
+
+        .query-interpretation h4 {
+            color: #2a5298;
+            margin-bottom: 10px;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .results-table th,
+        .results-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .results-table th {
+            background: #f5f5f5;
+            font-weight: 600;
+            color: #2a5298;
+        }
+
+        .results-table tr:hover {
+            background: #f9f9f9;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .query-section,
+            .results-section {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏌️ Golf Database Query</h1>
+            <p>Ask questions about PGA Tour players, tournaments, and performance data</p>
+        </div>
+
+        <div class="query-section">
+            <div class="query-input-container">
+                <input type="text" id="queryInput" class="query-input" 
+                       placeholder="Ask something like: 'Who won the Masters Tournament in 2017?' or 'Show me Tiger Woods tournament results'"
+                       maxlength="500">
+            </div>
+            <button id="queryButton" class="query-button">🔍 Search</button>
+
+            <div class="examples">
+                <h3>Try these example queries:</h3>
+                <div class="example-queries">
+                    <div class="example-query">Who won the Masters Tournament in 2017?</div>
+                    <div class="example-query">Show me Tiger Woods tournament results</div>
+                    <div class="example-query">Which players have the best putting stats?</div>
+                    <div class="example-query">What tournaments were played at Pebble Beach?</div>
+                    <div class="example-query">Show me Jordan Spieth 2015 season</div>
+                    <div class="example-query">Which course has the lowest scoring average?</div>
+                    <div class="example-query">Show me all major championship winners</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="results-section">
+            <div id="resultsContainer">
+                <div class="no-results">
+                    <h3>Welcome to the Golf Database!</h3>
+                    <p>Enter a natural language query above to search through:</p>
+                    <ul style="text-align: left; display: inline-block; margin-top: 15px;">
+                        <li>748 PGA Tour players (2014-2022)</li>
+                        <li>333 tournaments with detailed results</li>
+                        <li>92 unique golf courses</li>
+                        <li>36,864 individual performance records</li>
+                        <li>Comprehensive strokes gained data</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class GolfQueryInterface {
+            constructor() {
+                this.apiBase = '/api';
+                this.queryInput = document.getElementById('queryInput');
+                this.queryButton = document.getElementById('queryButton');
+                this.resultsContainer = document.getElementById('resultsContainer');
+                
+                this.initializeEventListeners();
+            }
+
+            initializeEventListeners() {
+                this.queryButton.addEventListener('click', () => this.handleQuery());
+                this.queryInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.handleQuery();
+                });
+
+                document.querySelectorAll('.example-query').forEach(example => {
+                    example.addEventListener('click', () => {
+                        this.queryInput.value = example.textContent;
+                        this.handleQuery();
+                    });
+                });
+            }
+
+            async handleQuery() {
+                const query = this.queryInput.value.trim();
+                if (!query) return;
+
+                this.showLoading();
+                this.queryButton.disabled = true;
+
+                try {
+                    const result = await this.processQuery(query);
+                    this.displayResults(result);
+                } catch (error) {
+                    this.showError(error.message);
+                } finally {
+                    this.queryButton.disabled = false;
+                }
+            }
+
+            async processQuery(query) {
+                const parsedQuery = this.parseNaturalLanguage(query);
+                const results = await this.executeQuery(parsedQuery);
+                
+                return {
+                    interpretation: parsedQuery,
+                    data: results,
+                    originalQuery: query
+                };
+            }
+
+            parseNaturalLanguage(query) {
+                const lowerQuery = query.toLowerCase();
+                
+                // Tournament winner patterns - IMPROVED
+                if (lowerQuery.includes('who won') || lowerQuery.includes('winner') || lowerQuery.includes('champion')) {
+                    return this.parseTournamentWinner(query);
+                }
+                
+                // Player performance patterns
+                if (lowerQuery.includes('show me') && (lowerQuery.includes('stats') || lowerQuery.includes('performance') || lowerQuery.includes('results'))) {
+                    return this.parsePlayerPerformance(query);
+                }
+                
+                // Best/worst performance patterns
+                if (lowerQuery.includes('best') || lowerQuery.includes('worst') || lowerQuery.includes('top')) {
+                    return this.parseBestWorstQuery(query);
+                }
+                
+                // Course-related queries
+                if (lowerQuery.includes('course') || lowerQuery.includes('pebble') || lowerQuery.includes('augusta') || lowerQuery.includes('torrey')) {
+                    return this.parseCourseQuery(query);
+                }
+                
+                // Tournament queries
+                if (lowerQuery.includes('tournament') || lowerQuery.includes('masters') || lowerQuery.includes('open')) {
+                    return this.parseTournamentQuery(query);
+                }
+                
+                // Default to search
+                return {
+                    type: 'search',
+                    query: query,
+                    description: `Searching for "${query}" across all data`
+                };
+            }
+
+            parseTournamentWinner(query) {
+                // IMPROVED: Better pattern matching for tournaments and years
+                const tournamentPatterns = [
+                    /masters?/i,
+                    /u\.?s\.?\s*open/i,
+                    /pga\s*championship/i,
+                    /open\s*championship/i,
+                    /british\s*open/i,
+                    /players?\s*championship/i,
+                    /memorial/i,
+                    /arnold\s*palmer/i
+                ];
+                
+                let tournamentMatch = null;
+                for (const pattern of tournamentPatterns) {
+                    const match = query.match(pattern);
+                    if (match) {
+                        tournamentMatch = match[0];
+                        break;
+                    }
+                }
+                
+                // IMPROVED: Better year extraction
+                const yearMatch = query.match(/\b(19|20)\d{2}\b/);
+                
+                return {
+                    type: 'tournament_winner',
+                    tournament: tournamentMatch,
+                    year: yearMatch ? yearMatch[0] : null,
+                    description: `Finding tournament winner${tournamentMatch ? ` for ${tournamentMatch}` : ''}${yearMatch ? ` in ${yearMatch[0]}` : ''}`
+                };
+            }
+
+            parsePlayerPerformance(query) {
+                // IMPROVED: Better player name extraction
+                const playerPatterns = [
+                    /tiger\s+woods?/i,
+                    /jordan\s+spieth/i,
+                    /rory\s+mcilroy/i,
+                    /dustin\s+johnson/i,
+                    /jason\s+day/i,
+                    /rickie\s+fowler/i,
+                    /phil\s+mickelson/i,
+                    /bubba\s+watson/i,
+                    /adam\s+scott/i,
+                    /sergio\s+garcia/i,
+                    /brooks\s+koepka/i,
+                    /justin\s+thomas/i
+                ];
+                
+                let playerMatch = null;
+                for (const pattern of playerPatterns) {
+                    const match = query.match(pattern);
+                    if (match) {
+                        playerMatch = match[0];
+                        break;
+                    }
+                }
+                
+                const yearMatch = query.match(/\b(19|20)\d{2}\b/);
+                
+                return {
+                    type: 'player_performance',
+                    player: playerMatch,
+                    year: yearMatch ? yearMatch[0] : null,
+                    description: `Getting performance data${playerMatch ? ` for ${playerMatch}` : ''}${yearMatch ? ` in ${yearMatch[0]}` : ''}`
+                };
+            }
+
+            parseBestWorstQuery(query) {
+                const statType = query.match(/(putting|driving|approach|scrambling|scoring)/i);
+                
+                return {
+                    type: 'best_worst',
+                    statType: statType ? statType[1] : 'overall',
+                    metric: query.includes('best') ? 'best' : 'worst',
+                    description: `Finding ${query.includes('best') ? 'best' : 'worst'} ${statType ? statType[1] : 'overall'} performance`
+                };
+            }
+
+            parseCourseQuery(query) {
+                const courseMatch = query.match(/(pebble beach|augusta|torrey pines|riviera|tpc sawgrass)/i);
+                
+                return {
+                    type: 'course',
+                    course: courseMatch ? courseMatch[1] : null,
+                    description: `Getting course information${courseMatch ? ` for ${courseMatch[1]}` : ''}`
+                };
+            }
+
+            parseTournamentQuery(query) {
+                const tournamentMatch = query.match(/(memorial|masters|open|championship|pga)/i);
+                
+                return {
+                    type: 'tournament',
+                    tournament: tournamentMatch ? tournamentMatch[1] : null,
+                    description: `Getting tournament information${tournamentMatch ? ` for ${tournamentMatch[1]}` : ''}`
+                };
+            }
+
+            async executeQuery(parsedQuery) {
+                switch (parsedQuery.type) {
+                    case 'tournament_winner':
+                        return await this.getTournamentWinner(parsedQuery);
+                    case 'player_performance':
+                        return await this.getPlayerPerformance(parsedQuery);
+                    case 'best_worst':
+                        return await this.getBestWorstPerformance(parsedQuery);
+                    case 'course':
+                        return await this.getCourseInfo(parsedQuery);
+                    case 'tournament':
+                        return await this.getTournamentInfo(parsedQuery);
+                    default:
+                        return await this.searchAll(parsedQuery.query);
+                }
+            }
+
+            // IMPROVED: Tournament winner API call
+            async getTournamentWinner(parsedQuery) {
+                let url = `${this.apiBase}/tournament-results`;
+                const params = new URLSearchParams();
+                
+                if (parsedQuery.tournament) {
+                    params.append('tournament', parsedQuery.tournament);
+                }
+                if (parsedQuery.year) {
+                    params.append('year', parsedQuery.year);
+                }
+                // FIXED: Add position=1 to get winners only
+                params.append('position', '1');
+                
+                if (params.toString()) {
+                    url += `?${params.toString()}`;
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.results || [];
+            }
+
+            async getPlayerPerformance(parsedQuery) {
+                let url = `${this.apiBase}/tournament-results`;
+                const params = new URLSearchParams();
+                
+                if (parsedQuery.player) {
+                    params.append('player', parsedQuery.player);
+                }
+                if (parsedQuery.year) {
+                    params.append('year', parsedQuery.year);
+                }
+                
+                if (params.toString()) {
+                    url += `?${params.toString()}`;
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.results || [];
+            }
+
+            async getBestWorstPerformance(parsedQuery) {
+                const response = await fetch(`${this.apiBase}/tournament-results?limit=20`);
+                const data = await response.json();
+                
+                let sortedData = data.results || [];
+                
+                if (parsedQuery.statType === 'putting') {
+                    sortedData = sortedData.filter(r => r.strokes_gained_putting !== null)
+                        .sort((a, b) => parsedQuery.metric === 'best' ? b.strokes_gained_putting - a.strokes_gained_putting : a.strokes_gained_putting - b.strokes_gained_putting);
+                } else if (parsedQuery.statType === 'driving') {
+                    sortedData = sortedData.filter(r => r.strokes_gained_off_tee !== null)
+                        .sort((a, b) => parsedQuery.metric === 'best' ? b.strokes_gained_off_tee - a.strokes_gained_off_tee : a.strokes_gained_off_tee - b.strokes_gained_off_tee);
+                } else {
+                    sortedData = sortedData.filter(r => r.total_strokes !== null)
+                        .sort((a, b) => parsedQuery.metric === 'best' ? a.total_strokes - b.total_strokes : b.total_strokes - a.total_strokes);
+                }
+                
+                return sortedData.slice(0, 10);
+            }
+
+            async getCourseInfo(parsedQuery) {
+                let url = `${this.apiBase}/courses`;
+                if (parsedQuery.course) {
+                    url += `?name=${encodeURIComponent(parsedQuery.course)}`;
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.courses || [];
+            }
+
+            async getTournamentInfo(parsedQuery) {
+                let url = `${this.apiBase}/tournaments`;
+                if (parsedQuery.tournament) {
+                    url += `?name=${encodeURIComponent(parsedQuery.tournament)}`;
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                return data.tournaments || [];
+            }
+
+            async searchAll(query) {
+                const response = await fetch(`${this.apiBase}/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                return data.results || [];
+            }
+
+            showLoading() {
+                this.resultsContainer.innerHTML = `
+                    <div class="loading">
+                        <h3>🔍 Searching...</h3>
+                        <p>Processing your query...</p>
+                    </div>
+                `;
+            }
+
+            showError(message) {
+                this.resultsContainer.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Error</h3>
+                        <p>${message}</p>
+                    </div>
+                `;
+            }
+
+            displayResults(result) {
+                const { interpretation, data, originalQuery } = result;
+                
+                let html = `
+                    <div class="query-interpretation">
+                        <h4>Query Interpretation:</h4>
+                        <p>${interpretation.description}</p>
+                    </div>
+                `;
+
+                if (!data || data.length === 0) {
+                    html += `
+                        <div class="no-results">
+                            <h3>No results found</h3>
+                            <p>Try rephrasing your query or check the example queries above.</p>
+                        </div>
+                    `;
+                } else {
+                    html += this.formatResults(data, interpretation.type);
+                }
+
+                this.resultsContainer.innerHTML = html;
+            }
+
+            // IMPROVED: Results formatting to show position info
+            formatResults(data, queryType) {
+                if (queryType === 'tournament_winner') {
+                    return this.formatTournamentWinners(data);
+                } else if (queryType === 'player_performance') {
+                    return this.formatPlayerResults(data);
+                } else {
+                    return this.formatGenericResults(data);
+                }
+            }
+
+            formatTournamentWinners(data) {
+                const columns = ['player_name', 'tournament_name', 'tournament_date', 'season', 'total_strokes', 'course_name'];
+                const headers = ['Winner', 'Tournament', 'Date', 'Season', 'Winning Score', 'Course'];
+                return this.createTable(data, columns, headers);
+            }
+
+            formatPlayerResults(data) {
+                const columns = ['player_name', 'tournament_name', 'tournament_date', 'total_strokes', 'position_numeric', 'made_cut'];
+                const headers = ['Player', 'Tournament', 'Date', 'Score', 'Position', 'Made Cut'];
+                return this.createTable(data, columns, headers);
+            }
+
+            formatGenericResults(data) {
+                const columns = this.getDisplayColumns(data[0]);
+                const headers = columns.map(col => 
+                    col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                );
+                return this.createTable(data, columns, headers);
+            }
+
+            getDisplayColumns(sampleRow) {
+                if (!sampleRow) return [];
+                
+                const allKeys = Object.keys(sampleRow);
+                const priorityKeys = ['player_name', 'tournament_name', 'tournament_date', 'course_name', 'total_strokes', 'position_numeric'];
+                
+                let displayKeys = [];
+                
+                // Add priority keys first if they exist
+                priorityKeys.forEach(key => {
+                    if (allKeys.includes(key)) {
+                        displayKeys.push(key);
+                    }
+                });
+                
+                // Add other keys up to 8 total columns
+                allKeys.forEach(key => {
+                    if (!displayKeys.includes(key) && displayKeys.length < 8) {
+                        displayKeys.push(key);
+                    }
+                });
+                
+                return displayKeys;
+            }
+
+            createTable(data, columns, headers) {
+                let html = `
+                    <div class="success">
+                        <strong>Found ${data.length} result${data.length !== 1 ? 's' : ''}</strong>
+                    </div>
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                ${headers.map(header => `<th>${header}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+
+                data.forEach(row => {
+                    html += '<tr>';
+                    columns.forEach(col => {
+                        let value = row[col];
+                        if (value === null || value === undefined) {
+                            value = '-';
+                        } else if (typeof value === 'number') {
+                            value = value.toLocaleString();
+                        }
+                        html += `<td>${value}</td>`;
+                    });
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                return html;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            new GolfQueryInterface();
+        });
+    </script>
+</body>
+</html>
+'''
+
 def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
@@ -43,16 +733,17 @@ def create_app():
     # Enable CORS for frontend integration
     CORS(app)
     
+    # NEW: Route to serve the HTML interface
     @app.route('/')
     def home():
-        return jsonify({
-            "message": "Golf Database API - Enhanced Edition",
-            "version": "2.0.0",
-            "status": "active",
-            "timestamp": datetime.utcnow().isoformat(),
-            "data_loaded": "747 players, 280 courses, 333 tournaments, 36,864 results"
-        })
+        return render_template_string(HTML_TEMPLATE)
     
+    @app.route('/interface')
+    def interface():
+        """Alternative route to the interface"""
+        return render_template_string(HTML_TEMPLATE)
+    
+    # Your existing API routes (keeping them exactly as they are)
     @app.route('/api/health')
     def health_check():
         if db_manager is None:
@@ -271,7 +962,7 @@ def create_app():
     
     @app.route('/api/tournament-results')
     def get_tournament_results():
-        """Get tournament results data"""
+        """Get tournament results data with proper filtering"""
         if db_manager is None:
             return jsonify({
                 "results": [],
@@ -286,15 +977,19 @@ def create_app():
             limit = request.args.get('limit', 50, type=int)
             player_name = request.args.get('player')
             tournament_name = request.args.get('tournament')
+            year = request.args.get('year')
+            position = request.args.get('position')  # NEW: for winner filtering
             
-            # Build query
+            # Build query with proper winner logic
             query_str = """
                 SELECT 
                     tr.result_id,
                     p.first_name || ' ' || p.last_name as player_name,
                     t.tournament_name,
                     t.tournament_date,
+                    t.season,
                     c.course_name,
+                    tr.position_numeric,
                     tr.final_position,
                     tr.total_strokes,
                     tr.made_cut,
@@ -306,20 +1001,85 @@ def create_app():
                 JOIN players p ON tr.player_id = p.player_id
                 JOIN tournaments_enhanced t ON tr.tournament_id = t.tournament_id
                 LEFT JOIN courses_enhanced c ON t.course_id = c.course_id
-                WHERE 1=1
+                WHERE tr.made_cut = 1
             """
             
             params = {}
             
+            # Player name filtering
             if player_name:
                 query_str += " AND (p.first_name LIKE :player_search OR p.last_name LIKE :player_search OR (p.first_name || ' ' || p.last_name) LIKE :player_search)"
                 params['player_search'] = f"%{player_name}%"
             
+            # Tournament name filtering
             if tournament_name:
                 query_str += " AND t.tournament_name LIKE :tournament_search"
                 params['tournament_search'] = f"%{tournament_name}%"
             
-            query_str += " ORDER BY t.tournament_date DESC, tr.position_numeric ASC"
+            # Year filtering (improved to handle both date and season)
+            if year:
+                query_str += " AND (t.tournament_date LIKE :year_search OR t.season = :year_numeric)"
+                params['year_search'] = f"%{year}%"
+                params['year_numeric'] = int(year)
+            
+            # Winner filtering (position = 1)
+            if position == '1':
+                # For each tournament, find the player with lowest strokes who made the cut
+                query_str = """
+                    WITH tournament_winners AS (
+                        SELECT 
+                            tr.tournament_id,
+                            MIN(tr.total_strokes) as winning_score
+                        FROM tournament_results tr
+                        WHERE tr.made_cut = 1 AND tr.total_strokes IS NOT NULL
+                        GROUP BY tr.tournament_id
+                    ),
+                    winner_details AS (
+                        SELECT 
+                            tr.result_id,
+                            p.first_name || ' ' || p.last_name as player_name,
+                            t.tournament_name,
+                            t.tournament_date,
+                            t.season,
+                            c.course_name,
+                            tr.position_numeric,
+                            tr.final_position,
+                            tr.total_strokes,
+                            tr.made_cut,
+                            tr.sg_total,
+                            tr.sg_putting,
+                            tr.sg_approach,
+                            tr.sg_off_the_tee,
+                            ROW_NUMBER() OVER (PARTITION BY tr.tournament_id ORDER BY tr.total_strokes ASC) as rank_in_tournament
+                        FROM tournament_results tr
+                        JOIN players p ON tr.player_id = p.player_id
+                        JOIN tournaments_enhanced t ON tr.tournament_id = t.tournament_id
+                        LEFT JOIN courses_enhanced c ON t.course_id = c.course_id
+                        JOIN tournament_winners tw ON tr.tournament_id = tw.tournament_id AND tr.total_strokes = tw.winning_score
+                        WHERE tr.made_cut = 1
+                """
+                
+                # Add filters to the CTE query
+                if player_name:
+                    query_str += " AND (p.first_name LIKE :player_search OR p.last_name LIKE :player_search OR (p.first_name || ' ' || p.last_name) LIKE :player_search)"
+                
+                if tournament_name:
+                    query_str += " AND t.tournament_name LIKE :tournament_search"
+                
+                if year:
+                    query_str += " AND (t.tournament_date LIKE :year_search OR t.season = :year_numeric)"
+                
+                query_str += """
+                    )
+                    SELECT * FROM winner_details 
+                    WHERE rank_in_tournament = 1
+                    ORDER BY tournament_date DESC
+                """
+            
+            else:
+                # Regular ordering for non-winner queries
+                query_str += " ORDER BY t.tournament_date DESC, tr.total_strokes ASC"
+            
             query_str += f" LIMIT {limit}"
             
             result = session.execute(text(query_str), params)
@@ -330,15 +1090,17 @@ def create_app():
                     "result_id": row[0],
                     "player_name": row[1],
                     "tournament_name": row[2],
-                    "tournament_date": row[3] if row[3] else None,  # Already a string
-                    "course_name": row[4],
-                    "final_position": row[5],
-                    "total_strokes": row[6],
-                    "made_cut": bool(row[7]) if row[7] is not None else None,
-                    "strokes_gained_total": float(row[8]) if row[8] is not None else None,
-                    "strokes_gained_putting": float(row[9]) if row[9] is not None else None,
-                    "strokes_gained_approach": float(row[10]) if row[10] is not None else None,
-                    "strokes_gained_off_tee": float(row[11]) if row[11] is not None else None
+                    "tournament_date": row[3] if row[3] else None,
+                    "season": row[4],
+                    "course_name": row[5],
+                    "position_numeric": row[6],
+                    "final_position": row[7],
+                    "total_strokes": row[8],
+                    "made_cut": bool(row[9]) if row[9] is not None else None,
+                    "strokes_gained_total": float(row[10]) if row[10] is not None else None,
+                    "strokes_gained_putting": float(row[11]) if row[11] is not None else None,
+                    "strokes_gained_approach": float(row[12]) if row[12] is not None else None,
+                    "strokes_gained_off_tee": float(row[13]) if row[13] is not None else None
                 }
                 results_data.append(result_dict)
             
@@ -354,6 +1116,8 @@ def create_app():
                 "filters": {
                     "player": player_name,
                     "tournament": tournament_name,
+                    "year": year,
+                    "position": position,
                     "limit": limit
                 },
                 "message": f"Showing {len(results_data)} tournament results"
@@ -464,9 +1228,10 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    print("🏌️ Starting Enhanced Golf Database API...")
+    print("🏌️ Starting Enhanced Golf Database API with Natural Language Interface...")
     print("📡 API will be available at: http://localhost:5000")
-    print("🎯 New endpoints:")
+    print("🌐 Natural Language Interface at: http://localhost:5000")
+    print("🎯 API endpoints:")
     print("   • /api/courses - Real course data")
     print("   • /api/tournaments - Real tournament data") 
     print("   • /api/tournament-results - Individual results")
