@@ -36,7 +36,7 @@ except ImportError as e:
     print("Make sure your database modules are properly set up")
     print("Continuing without database connection...")
 
-# HTML Template for the Natural Language Interface
+
 HTML_TEMPLATE = '''
 <!DOCTYPE html>
 <html lang="en">
@@ -228,6 +228,35 @@ HTML_TEMPLATE = '''
             color: #666;
         }
 
+        .download-section {
+            margin-top: 20px;
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .download-button {
+            background: linear-gradient(45deg, #2196F3, #1976D2);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin: 0 5px;
+        }
+
+        .download-button:hover {
+            transform: translateY(-1px);
+        }
+
+        .download-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -297,6 +326,7 @@ HTML_TEMPLATE = '''
                 this.queryInput = document.getElementById('queryInput');
                 this.queryButton = document.getElementById('queryButton');
                 this.resultsContainer = document.getElementById('resultsContainer');
+                this.currentResults = null; // Store current results for download
                 
                 this.initializeEventListeners();
             }
@@ -346,7 +376,7 @@ HTML_TEMPLATE = '''
             parseNaturalLanguage(query) {
                 const lowerQuery = query.toLowerCase();
                 
-                // Tournament winner patterns - IMPROVED
+                // Tournament winner patterns
                 if (lowerQuery.includes('who won') || lowerQuery.includes('winner') || lowerQuery.includes('champion')) {
                     return this.parseTournamentWinner(query);
                 }
@@ -380,29 +410,28 @@ HTML_TEMPLATE = '''
             }
 
             parseTournamentWinner(query) {
-                // IMPROVED: Better pattern matching for tournaments and years
-                const tournamentPatterns = [
-                    /masters?/i,
-                    /u\.?s\.?\s*open/i,
-                    /pga\s*championship/i,
-                    /open\s*championship/i,
-                    /british\s*open/i,
-                    /players?\s*championship/i,
-                    /memorial/i,
-                    /arnold\s*palmer/i
-                ];
-                
+                const lowerQuery = query.toLowerCase();
                 let tournamentMatch = null;
-                for (const pattern of tournamentPatterns) {
-                    const match = query.match(pattern);
-                    if (match) {
-                        tournamentMatch = match[0];
-                        break;
-                    }
+                
+                // Simple string matching instead of complex regex
+                if (lowerQuery.includes('masters')) {
+                    tournamentMatch = 'masters';
+                } else if (lowerQuery.includes('memorial')) {
+                    tournamentMatch = 'memorial';
+                } else if (lowerQuery.includes('u.s. open') || lowerQuery.includes('us open')) {
+                    tournamentMatch = 'u.s. open';
+                } else if (lowerQuery.includes('pga championship')) {
+                    tournamentMatch = 'pga championship';
+                } else if (lowerQuery.includes('open championship') || lowerQuery.includes('british open')) {
+                    tournamentMatch = 'open championship';
+                } else if (lowerQuery.includes('players championship') || lowerQuery.includes('players')) {
+                    tournamentMatch = 'players';
+                } else if (lowerQuery.includes('arnold palmer')) {
+                    tournamentMatch = 'arnold palmer';
                 }
                 
-                // IMPROVED: Better year extraction
-                const yearMatch = query.match(/\b(19|20)\d{2}\b/);
+                // Simple year extraction
+                const yearMatch = query.match(/\\b(19|20)\\d{2}\\b/);
                 
                 return {
                     type: 'tournament_winner',
@@ -413,32 +442,25 @@ HTML_TEMPLATE = '''
             }
 
             parsePlayerPerformance(query) {
-                // IMPROVED: Better player name extraction
-                const playerPatterns = [
-                    /tiger\s+woods?/i,
-                    /jordan\s+spieth/i,
-                    /rory\s+mcilroy/i,
-                    /dustin\s+johnson/i,
-                    /jason\s+day/i,
-                    /rickie\s+fowler/i,
-                    /phil\s+mickelson/i,
-                    /bubba\s+watson/i,
-                    /adam\s+scott/i,
-                    /sergio\s+garcia/i,
-                    /brooks\s+koepka/i,
-                    /justin\s+thomas/i
-                ];
-                
+                const lowerQuery = query.toLowerCase();
                 let playerMatch = null;
-                for (const pattern of playerPatterns) {
-                    const match = query.match(pattern);
-                    if (match) {
-                        playerMatch = match[0];
-                        break;
-                    }
+                
+                // Simple player name matching
+                if (lowerQuery.includes('tiger woods')) {
+                    playerMatch = 'tiger woods';
+                } else if (lowerQuery.includes('jordan spieth')) {
+                    playerMatch = 'jordan spieth';
+                } else if (lowerQuery.includes('rory mcilroy')) {
+                    playerMatch = 'rory mcilroy';
+                } else if (lowerQuery.includes('sergio garcia')) {
+                    playerMatch = 'sergio garcia';
+                } else if (lowerQuery.includes('dustin johnson')) {
+                    playerMatch = 'dustin johnson';
+                } else if (lowerQuery.includes('phil mickelson')) {
+                    playerMatch = 'phil mickelson';
                 }
                 
-                const yearMatch = query.match(/\b(19|20)\d{2}\b/);
+                const yearMatch = query.match(/\\b(19|20)\\d{2}\\b/);
                 
                 return {
                     type: 'player_performance',
@@ -496,7 +518,6 @@ HTML_TEMPLATE = '''
                 }
             }
 
-            // IMPROVED: Tournament winner API call
             async getTournamentWinner(parsedQuery) {
                 let url = `${this.apiBase}/tournament-results`;
                 const params = new URLSearchParams();
@@ -507,7 +528,6 @@ HTML_TEMPLATE = '''
                 if (parsedQuery.year) {
                     params.append('year', parsedQuery.year);
                 }
-                // FIXED: Add position=1 to get winners only
                 params.append('position', '1');
                 
                 if (params.toString()) {
@@ -608,6 +628,9 @@ HTML_TEMPLATE = '''
             displayResults(result) {
                 const { interpretation, data, originalQuery } = result;
                 
+                // Store current results for download
+                this.currentResults = data;
+                
                 let html = `
                     <div class="query-interpretation">
                         <h4>Query Interpretation:</h4>
@@ -616,6 +639,7 @@ HTML_TEMPLATE = '''
                 `;
 
                 if (!data || data.length === 0) {
+                    this.currentResults = null;
                     html += `
                         <div class="no-results">
                             <h3>No results found</h3>
@@ -624,12 +648,23 @@ HTML_TEMPLATE = '''
                     `;
                 } else {
                     html += this.formatResults(data, interpretation.type);
+                    
+                    // Add download section
+                    html += `
+                        <div class="download-section">
+                            <h4>📊 Download Results</h4>
+                            <button class="download-button" onclick="window.golfInterface.downloadCSV()">📊 Download CSV</button>
+                            <button class="download-button" onclick="window.golfInterface.downloadJSON()">📄 Download JSON</button>
+                            <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
+                                ${data.length} result${data.length !== 1 ? 's' : ''} • Query: "${originalQuery}"
+                            </p>
+                        </div>
+                    `;
                 }
 
                 this.resultsContainer.innerHTML = html;
             }
 
-            // IMPROVED: Results formatting to show position info
             formatResults(data, queryType) {
                 if (queryType === 'tournament_winner') {
                     return this.formatTournamentWinners(data);
@@ -655,7 +690,7 @@ HTML_TEMPLATE = '''
             formatGenericResults(data) {
                 const columns = this.getDisplayColumns(data[0]);
                 const headers = columns.map(col => 
-                    col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+                    col.replace(/_/g, ' ').replace(/\\b\\w/g, l => l.toUpperCase())
                 );
                 return this.createTable(data, columns, headers);
             }
@@ -668,14 +703,12 @@ HTML_TEMPLATE = '''
                 
                 let displayKeys = [];
                 
-                // Add priority keys first if they exist
                 priorityKeys.forEach(key => {
                     if (allKeys.includes(key)) {
                         displayKeys.push(key);
                     }
                 });
                 
-                // Add other keys up to 8 total columns
                 allKeys.forEach(key => {
                     if (!displayKeys.includes(key) && displayKeys.length < 8) {
                         displayKeys.push(key);
@@ -716,10 +749,72 @@ HTML_TEMPLATE = '''
                 html += '</tbody></table>';
                 return html;
             }
+
+            downloadCSV() {
+                if (!this.currentResults || this.currentResults.length === 0) {
+                    alert('No data to download');
+                    return;
+                }
+
+                const csvData = this.convertToCSV(this.currentResults);
+                const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `golf_query_results_${new Date().toISOString().slice(0,10)}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            downloadJSON() {
+                if (!this.currentResults || this.currentResults.length === 0) {
+                    alert('No data to download');
+                    return;
+                }
+
+                const jsonData = JSON.stringify(this.currentResults, null, 2);
+                const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `golf_query_results_${new Date().toISOString().slice(0,10)}.json`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            convertToCSV(data) {
+                if (!data || data.length === 0) return '';
+                
+                const allKeys = [...new Set(data.flatMap(Object.keys))];
+                const header = allKeys.join(',');
+                
+                const rows = data.map(row => {
+                    return allKeys.map(key => {
+                        let value = row[key];
+                        
+                        if (value === null || value === undefined) {
+                            value = '';
+                        }
+                        
+                        value = String(value);
+                        if (value.includes(',') || value.includes('"') || value.includes('\\n')) {
+                            value = '"' + value.replace(/"/g, '""') + '"';
+                        }
+                        
+                        return value;
+                    }).join(',');
+                });
+                
+                return [header, ...rows].join('\\n');
+            }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            new GolfQueryInterface();
+            window.golfInterface = new GolfQueryInterface();
         });
     </script>
 </body>
